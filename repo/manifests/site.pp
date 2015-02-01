@@ -11,7 +11,7 @@ exec {"jenkins-slave docker membership":
   unless => "grep -q 'docker\\S*jenkins-slave' /etc/group",
   command => "usermod -aG docker jenkins-slave",
   require => [User['jenkins-slave'],
-              Package['lxc-docker'],
+              Package['docker-io'],
              ],
 }
 
@@ -111,7 +111,7 @@ package {"python":
   ensure => "installed",
 }
 
-package {"python-yaml":
+package {"PyYAML":
   ensure => "installed",
 }
 
@@ -189,7 +189,11 @@ package {"reprepro":
 package {"python-configparser":
   ensure => "installed",
 }
+
 # GPG key management
+package { 'gnupg':
+  ensure => 'installed',
+}
 
 file { '/home/jenkins-slave/.ssh/gpg_private_key.sec':
     mode => '0600',
