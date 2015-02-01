@@ -1,5 +1,3 @@
-include apt
-
 include jenkins
 
 include jenkins_files
@@ -306,7 +304,7 @@ package { 'python3-psutil':
 }
 
 # required by management jobs to read rosdistro yaml files
-package { 'python3-yaml':
+package { 'python3-PyYAML':
   ensure => 'installed',
 }
 
