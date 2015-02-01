@@ -64,11 +64,6 @@ package { 'mercurial':
   ensure => 'installed',
 }
 
-# required for armhf builds
-package { 'qemu-user-static':
-  ensure => 'installed',
-}
-
 package { 'subversion':
   ensure => 'installed',
 }
