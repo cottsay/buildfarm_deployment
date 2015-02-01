@@ -68,6 +68,11 @@ package { 'subversion':
   ensure => 'installed',
 }
 
+## required to run iptables without firewalld
+package { 'iptables-services':
+  ensure => 'installed',
+}
+
 # setup ntp with defaults
 include '::ntp'
 
