@@ -186,7 +186,7 @@ class profile::ros::repo {
     }
 
     ['building', 'testing', 'main'].each |String $reponame| {
-      exec {"init_${reponame}_repo":
+      exec {"init_ubuntu_${reponame}_repo":
         path        => '/bin:/usr/bin',
         command     => "python /home/${agent_username}/reprepro-updater/scripts/setup_repo.py ubuntu_${reponame} -c",
         environment => ["PYTHONPATH=/home/${agent_username}/reprepro-updater/src"],
@@ -200,6 +200,106 @@ class profile::ros::repo {
           File['/var/repos', '/var/repos/ubuntu'],
           Package['python-yaml', 'python-configparser'],
         ]
+      }
+    }
+
+    file { "/tmp/Dockerfile-createrepo":
+      ensure  => 'file',
+      owner  => $agent_username,
+      group  => $agent_username,
+      content => @("EOF"),
+                 FROM centos:latest
+                 RUN yum -y install createrepo_c
+                 |EOF
+    }
+
+    docker::image {'createrepo_cmd':
+      docker_file => '/tmp/Dockerfile-createrepo',
+      require => File['/tmp/Dockerfile-createrepo'],
+    }
+
+    hiera('jenkins-agent::rpm_config').each |String $distro_name, Hash $distro| {
+      $distro_dir = "/var/repos/${distro_name}"
+      file { $distro_dir:
+        ensure => 'directory',
+        mode   => '0644',
+        owner  => $agent_username,
+        group  => $agent_username,
+        require => File['/var/repos'],
+      }
+
+      ['building', 'testing', 'main'].each |String $reponame| {
+        $repo_dir = "${distro_dir}/${reponame}"
+        file { $repo_dir:
+          ensure => 'directory',
+          mode   => '0644',
+          owner  => $agent_username,
+          group  => $agent_username,
+          require => File[$distro_dir],
+        }
+
+        $distro['versions'].each |String $distro_ver| {
+          $distro_ver_dir = "${repo_dir}/${distro_ver}"
+          $distro_source_dir = "${repo_dir}/${distro_ver}/SRPMS"
+          file { [$distro_ver_dir, $distro_source_dir]:
+            ensure => 'directory',
+            mode   => '0644',
+            owner  => $agent_username,
+            group  => $agent_username,
+            require => File[$distro_dir],
+          }
+
+          docker::run {"init_${distro_name}_${reponame}_${distro_ver}_SRPMS_repo":
+            image => 'createrepo_cmd',
+            command => 'bash -c "createrepo_c /tmp/repo && chown -R --reference /tmp/repo /tmp/repo/repodata"',
+            remove_container_on_stop => true,
+            disable_network => true,
+            restart => 'no',
+            volumes => ["${distro_source_dir}:/tmp/repo"],
+            require => [
+              File[$distro_source_dir],
+              Docker::Image['createrepo_cmd'],
+            ],
+          }
+
+          $distro['architectures'].each |String $distro_arch| {
+            $distro_arch_dir = "${distro_ver_dir}/${distro_arch}"
+            $distro_debug_dir = "${distro_arch_dir}/debug"
+            file { [$distro_arch_dir, $distro_debug_dir]:
+              ensure => 'directory',
+              mode   => '0644',
+              owner  => $agent_username,
+              group  => $agent_username,
+              require => File[$distro_ver_dir],
+            }
+
+            docker::run {"init_${distro_name}_${reponame}_${distro_ver}_${distro_arch}_repo":
+              image => 'createrepo_cmd',
+              command => 'bash -c "createrepo_c /tmp/repo --exclude=debug/* && chown -R --reference /tmp/repo /tmp/repo/repodata"',
+              remove_container_on_stop => true,
+              disable_network => true,
+              restart => 'no',
+              volumes => ["${distro_arch_dir}:/tmp/repo"],
+              require => [
+                File[$distro_arch_dir],
+                Docker::Image['createrepo_cmd'],
+              ],
+            }
+
+            docker::run {"init_${distro_name}_${reponame}_${distro_ver}_${distro_arch}_debug_repo":
+              image => 'createrepo_cmd',
+              command => 'bash -c "createrepo_c /tmp/repo && chown -R --reference /tmp/repo /tmp/repo/repodata"',
+              remove_container_on_stop => true,
+              disable_network => true,
+              restart => 'no',
+              volumes => ["${distro_debug_dir}:/tmp/repo"],
+              require => [
+                File[$distro_debug_dir],
+                Docker::Image['createrepo_cmd'],
+              ],
+            }
+          }
+        }
       }
     }
 
